@@ -2,27 +2,102 @@ import sys
 import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
-    QPushButton, QVBoxLayout, QHBoxLayout,
-    QLabel, QFileDialog, QStatusBar,
-    QMessageBox, QComboBox, QSlider,
-    QInputDialog, QDialog, QProgressBar,
-    QGridLayout, QListWidget
+    QPushButton, QVBoxLayout, QLabel,
+    QFileDialog, QStatusBar, QMessageBox,
+    QComboBox, QSlider, QInputDialog,
+    QDialog, QProgressBar, QGridLayout,
+    QListWidget, QToolBar, QAction
 )
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt
 
 
 class ImageProcessor:
+    """
+    Simple utility class to process images
+    and manage image operations such as load,
+    resize, and save.
+
+    Attributes:
+    -----------
+            None
+
+    Methods:
+    ----------
+            - load_image(file_path) -> QImage
+            - save_image(image, file_path) -> None
+            - resize_image(
+                image,
+                factor,
+                algorithm=Qt.SmoothTransformation) -> QImage
+    """
     @staticmethod
     def load_image(file_path):
+        """
+        Load an image from a file path.
+
+        Parameters:
+        ------------
+            file_path : str
+                The image file path to load an image from.
+
+        Returns:
+        ------------
+            QImage object
+                The loaded image.
+        """
         return QImage(file_path)
 
     @staticmethod
-    def save_image(image, file_path):
-        image.save(file_path)
+    def save_image(image, file_path, quality=85, format=None):
+        """
+        Save an image to a file.
+
+        Parameters:
+        ------------
+            image : QImage
+                The image to save.
+
+            file_path : str
+                The file path to save the image to.
+
+            quality : int
+                The quality of the image (for JPEGs).
+
+            format : str
+                The format of the image to save.
+                Supported options are: 'PNG', 'JPG', 'BMP', and 'GIF'.
+
+        Returns:
+        ------------
+            None
+        """
+        if format is None:
+            format = 'PNG'  # Default format
+        image.save(file_path, format, quality)
 
     @staticmethod
     def resize_image(image, factor, algorithm=Qt.SmoothTransformation):
+        """
+        Resize an image by a given factor.
+
+        Parameters:
+        ------------
+            image : QImage
+                The image to resize.
+
+            factor : float
+                The factor to resize the image by.
+
+            algorithm : Qt.TransformationMode
+                The transformation algorithm to use.
+                Default is Qt.SmoothTransformation.
+
+        Returns:
+        ------------
+            QImage object
+                The resized image.
+        """
         new_width = int(image.width() * factor)
         new_height = int(image.height() * factor)
         return image.scaled(
@@ -34,23 +109,99 @@ class ImageProcessor:
 
 
 class ImageData:
+    """
+    Holds the image history and the current image
+    being worked on.
+
+    Attributes:
+    ------------
+            image_history : list
+                A list to keep track of all image modifications.
+
+            current_index : int
+                An index to keep track of the current image
+                shown in the UI.
+
+            original_image_path : str
+                The file path of the original image.
+
+            original_image : QImage
+                The original image loaded from file.
+
+            resized_image : QImage
+                The image that has been modified.
+
+    Methods:
+    -----------
+            - add_to_history(image: QImage) -> None
+            - undo() -> QImage
+            - redo() -> QImage
+    """
+
     def __init__(self):
+        """
+        Initialize the image history and the current index.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ----------
+            None
+        """
         self.image_history = []
         self.current_index = -1  # No image at the start
 
     def add_to_history(self, image):
+        """
+        Add the new image to the image history.
+
+        Parameters:
+        ------------
+            image : QImage
+                The image to add to the history.
+
+        Returns:
+        ---------
+            None
+        """
         # When a new action is done, truncate the list to the current index
         self.image_history = self.image_history[:self.current_index + 1]
         self.image_history.append(image.copy())
         self.current_index += 1
 
     def undo(self):
+        """
+        Return the previous image from the history.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ---------
+            QImage object
+                The previous image.
+        """
         if self.current_index > 0:
             self.current_index -= 1
             return self.image_history[self.current_index]
         return None
 
     def redo(self):
+        """
+        Return the next image from the history.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ---------
+            QImage object
+                The next image.
+        """
         if self.current_index < len(self.image_history) - 1:
             self.current_index += 1
             return self.image_history[self.current_index]
@@ -58,29 +209,141 @@ class ImageData:
 
 
 class UIComponents:
+    """
+    A collection of common UI components for reuse.
+
+    Attributes:
+    -----------
+            None
+
+    Methods:
+    -----------
+            - create_button(text, callback) -> QPushButton
+            - create_combo_box(options) -> QComboBox
+            - create_label(text) -> QLabel
+    """
     @staticmethod
     def create_button(text, callback):
+        """
+        Create a QPushButton.
+
+        Parameters:
+        ------------
+            text : str
+                The text to display on the button.
+
+            callback : function
+                The function to call when the button is clicked.
+
+        Returns:
+        ---------
+            QPushButton
+                The newly created button.
+        """
         button = QPushButton(text)
         button.clicked.connect(callback)
         return button
 
     @staticmethod
     def create_combo_box(options):
+        """
+        Create a QComboBox.
+
+        Parameters:
+        -----------
+            options : list
+                The options to include in the combo box.
+
+        Returns:
+        ---------
+            QComboBox
+                The newly created combo box.
+        """
         combo_box = QComboBox()
         # Include the new resize options
-        combo_box.addItems(['25%', '50%', '75%', '100%', '200%',
-                           '300%', '400%', '500%', '700%', 'Anpassen...'])
+        combo_box.addItems(options)
         return combo_box
 
     @staticmethod
     def create_label(text):
+        """
+        Create a QLabel.
+
+        Parameters:
+        -----------
+            text : str
+                The text to display in the label.
+
+        Returns:
+        ---------
+            QLabel
+                The newly created label.
+        """
         label = QLabel(text)
         label.setAlignment(Qt.AlignCenter)
         return label
 
 
 class UIElements:
+    """
+    A collection of the necessary UI elements
+    for the main application.
+
+    Attributes:
+    ------------
+            open_button : QPushButton
+                A button to open an image file.
+
+            size_combo : QComboBox
+                A combo box to select the resize size.
+
+            file_size_slider : QSlider
+                A slider to select the maximum file size.
+
+            file_size_label : QLabel
+                A label to display the current file size.
+
+            apply_button : QPushButton
+                A button to apply the resize operation.
+
+            save_button : QPushButton
+                A button to save the resized image.
+
+            image_label : QLabel
+                A label to display the image.
+
+            width_input : QLineEdit
+                An input to enter the new width.
+
+            height_input : QLineEdit
+                An input to enter the new height.
+
+            aspect_ratio_lock : QCheckBox
+                A checkbox to lock the aspect ratio.
+
+            quality_slider : QSlider
+                A slider to adjust the image quality.
+
+            format_combo_box : QComboBox
+                A combo box to select the image format.
+
+    Methods:
+    ---------
+            None
+    """
+
     def __init__(self):
+        """
+        Initialize all the UI elements as None.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ----------
+            None
+        """
         self.open_button = None
         self.size_combo = None
         self.file_size_slider = None
@@ -91,16 +354,68 @@ class UIElements:
         self.width_input = None
         self.height_input = None
         self.aspect_ratio_lock = None
+        self.quality_slider = None
+        self.format_combo_box = None
+        self.undo_button = None
+        self.redo_button = None
 
     def __repr__(self):
-        return "UIElements()"
+        """
+        Return the UIElements instance.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ----------
+            str
+                A string representation of the UIElements instance.
+        """
+        return [str(self.__class__), self.__dict__]
 
     def __str__(self):
+        """
+        Return a description of the UIElements instance.
+
+        Parameters:
+        -----------
+            None
+
+        Returns:
+        ---------
+            str
+                A string describing the UIElements instance.
+        """
         return "This class holds the necessary UI elements"
 
 
 class DraggableListWidget(QListWidget):
+    """
+    A QListWidget that accepts dragged files.
+    Inherits from QListWidget to allow the handling of
+    drag and drop events.
+
+    Methods:
+    -----------
+            dragEnterEvent(event) -> None
+            dragMoveEvent(event) -> None
+            dropEvent(event) -> None
+    """
+
     def __init__(self, parent=None):
+        """
+        Initialize the QListWidget.
+
+        Parameters:
+        ------------
+            parent : QWidget
+                The parent widget, if any, for the QListWidget.
+
+        Returns:
+        ---------
+            None
+        """
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setDragDropMode(QListWidget.DragDrop)  # Enable drag & drop
@@ -108,14 +423,50 @@ class DraggableListWidget(QListWidget):
         self.setSelectionMode(QListWidget.ExtendedSelection)
 
     def dragEnterEvent(self, event):
+        """
+        Accept the file drag event.
+
+        Parameters:
+        ------------
+            event : QDragEnterEvent
+                The drag enter event.
+
+        Returns:
+        ---------
+            None
+        """
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
     def dragMoveEvent(self, event):
+        """
+        Accept the file move event.
+
+        Parameters:
+        ------------
+            event : QDragMoveEvent
+                The drag move event.
+
+        Returns:
+        ---------
+            None
+        """
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
     def dropEvent(self, event):
+        """
+        Accept the file drop event.
+
+        Parameters:
+        ------------
+            event : QDropEvent
+                The drop event.
+
+        Returns:
+        ---------
+            None
+        """
         for url in event.mimeData().urls():
             if url.isLocalFile():
                 self.addItem(url.toLocalFile())
@@ -188,74 +539,126 @@ class ImageResizingApp(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle(self.title)
-        # Adjusted window size for a more spacious layout
         self.setGeometry(100, 100, 900, 650)
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
-        # Main widget and layout configuration
+        # Menüleiste
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu('&Datei')
+        edit_menu = menubar.addMenu('&Bearbeiten')
+
+        # Haupt-Widget und Layout-Konfiguration
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout()
-        controls_layout = QHBoxLayout()
-        resize_layout = QVBoxLayout()  # New layout for resize options
+        main_layout = QVBoxLayout(main_widget)
 
-        # Initialize UI elements
-        self.ui_elements.open_button = UIComponents.create_button(
-            'Bild öffnen', self.open_image)
-        controls_layout.addWidget(self.ui_elements.open_button)
+        # Toolbar für die Aktionen
+        action_toolbar = QToolBar("Actions")
+        self.addToolBar(Qt.TopToolBarArea, action_toolbar)
 
+        self.actionExit = QAction('&Quit', self)
+        self.actionExit.setShortcut('Ctrl+Q')
+        self.actionExit.triggered.connect(self.close)
+
+        self.actionAbout = QAction('&About', self)
+        self.actionAbout.setShortcut('Ctrl+A')
+        self.actionAbout.triggered.connect(self.showAbout)
+
+        self.actionTutorial = QAction('&Tutorial', self)
+        self.actionTutorial.setShortcut('Ctrl+T')
+        self.actionTutorial.triggered.connect(self.showTutorial)
+
+        self.actionContact = QAction('&Contact', self)
+        self.actionContact.setShortcut('Ctrl+C')
+        self.actionContact.triggered.connect(self.showContact)
+
+        # Öffnen-Aktion
+        open_action = QAction('Bild öffnen', self)
+        open_action.triggered.connect(self.open_image)
+        file_menu.addAction(open_action)
+        action_toolbar.addAction(open_action)
+
+        # Anwenden-Aktion
+        apply_action = QAction('Anwenden', self)
+        apply_action.triggered.connect(self.apply_resize)
+        edit_menu.addAction(apply_action)
+        action_toolbar.addAction(apply_action)
+
+        # Undo-Aktion
+        undo_action = QAction('Undo', self)
+        undo_action.triggered.connect(self.undo_action)
+        edit_menu.addAction(undo_action)
+        action_toolbar.addAction(undo_action)
+
+        # Redo-Aktion
+        redo_action = QAction('Redo', self)
+        redo_action.triggered.connect(self.redo_action)
+        edit_menu.addAction(redo_action)
+        action_toolbar.addAction(redo_action)
+
+        # Batch-Verarbeitung-Aktion
+        batch_action = QAction('Batch Processing', self)
+        batch_action.triggered.connect(self.open_batch_dialog)
+        edit_menu.addAction(batch_action)
+        action_toolbar.addAction(batch_action)
+
+        # Speichern-Aktion
+        save_action = QAction('Bild speichern', self)
+        save_action.triggered.connect(self.save_image)
+        file_menu.addAction(save_action)
+        action_toolbar.addAction(save_action)
+
+        file_menu.addAction(self.actionAbout)
+        file_menu.addAction(self.actionTutorial)
+        file_menu.addAction(self.actionContact)
+        file_menu.addSeparator()
+        file_menu.addAction(self.actionExit)
+
+        # Rest der UI-Elemente wie Slider, ComboBoxen etc.
+        # Größenanpassungs-ComboBox
+        main_layout.addWidget(UIComponents.create_label('Größe anpassen:'))
         self.ui_elements.size_combo = UIComponents.create_combo_box(
-            ['25%', '50%', '75%', 'Anpassen...'])
-        resize_layout.addWidget(UIComponents.create_label('Größe anpassen:'))
-        resize_layout.addWidget(self.ui_elements.size_combo)
+            ['25%', '50%', '75%', '100%', '200%', '300%', '400%', '500%', '700%', 'Anpassen...'])
+        main_layout.addWidget(self.ui_elements.size_combo)
 
-        # File Size Selection (New Feature)
+        # Max File Size Slider
+        main_layout.addWidget(UIComponents.create_label('Max file size (KB):'))
         self.ui_elements.file_size_slider = QSlider(Qt.Horizontal)
-        self.ui_elements.file_size_slider.setMinimum(
-            100)  # Minimum file size (KB)
-        self.ui_elements.file_size_slider.setMaximum(
-            5000)  # Maximum file size (KB)
-        self.ui_elements.file_size_slider.setValue(1000)  # Default value (KB)
+        self.ui_elements.file_size_slider.setMinimum(100)
+        self.ui_elements.file_size_slider.setMaximum(5000)
+        self.ui_elements.file_size_slider.setValue(1000)
         self.ui_elements.file_size_slider.setTickPosition(QSlider.TicksBelow)
         self.ui_elements.file_size_slider.setTickInterval(500)
-
-        # Label to display the current file size
+        main_layout.addWidget(self.ui_elements.file_size_slider)
         self.ui_elements.file_size_label = QLabel('1000 KB')
-        self.ui_elements.file_size_slider.valueChanged.connect(
-            lambda: self.ui_elements.file_size_label.setText(
-                f"{self.ui_elements.file_size_slider.value()} KB")
-        )
-        resize_layout.addWidget(
-            UIComponents.create_label('Maximale Dateigröße (KB):'))
-        resize_layout.addWidget(self.ui_elements.file_size_slider)
-        resize_layout.addWidget(self.ui_elements.file_size_label)
+        main_layout.addWidget(self.ui_elements.file_size_label)
 
-        self.ui_elements.apply_button = UIComponents.create_button(
-            'Anwenden', self.apply_resize)
-        controls_layout.addWidget(self.ui_elements.apply_button)
+        # Quality Slider
+        main_layout.addWidget(UIComponents.create_label('Quality:'))
+        self.ui_elements.quality_slider = QSlider(Qt.Horizontal)
+        self.ui_elements.quality_slider.setMinimum(1)
+        self.ui_elements.quality_slider.setMaximum(100)
+        self.ui_elements.quality_slider.setValue(85)
+        self.ui_elements.quality_slider.setTickPosition(QSlider.TicksBelow)
+        self.ui_elements.quality_slider.setTickInterval(10)
+        main_layout.addWidget(self.ui_elements.quality_slider)
 
-        self.ui_elements.batch_button = UIComponents.create_button(
-            'Batch Processing', self.open_batch_dialog)
-        controls_layout.addWidget(self.ui_elements.batch_button)
+        # Format Combo Box
+        main_layout.addWidget(UIComponents.create_label('Format:'))
+        self.ui_elements.format_combo_box = UIComponents.create_combo_box(
+            ['JPEG', 'PNG', 'BMP', 'GIF'])
+        main_layout.addWidget(self.ui_elements.format_combo_box)
 
-        self.ui_elements.save_button = UIComponents.create_button(
-            'Bild speichern', self.save_image)
-        self.ui_elements.save_button.setEnabled(False)
-        controls_layout.addWidget(self.ui_elements.save_button)
-
+        # Image Label
         self.ui_elements.image_label = UIComponents.create_label(
             'Bild wird hier angezeigt')
-        # Ensure there's enough space to display images
         self.ui_elements.image_label.setMinimumSize(400, 300)
-
-        # Assembling the layout
-        main_layout.addLayout(controls_layout)
-        main_layout.addLayout(resize_layout)  # Add the new resize layout
         main_layout.addWidget(self.ui_elements.image_label)
+
+        # Fügen Sie das layout zum main_widget hinzu
         main_widget.setLayout(main_layout)
 
-        # Styling (example)
         self.apply_styling()
 
     def open_batch_dialog(self):
@@ -265,61 +668,61 @@ class ImageResizingApp(QMainWindow):
     def apply_styling(self):
         self.setStyleSheet("""
         QMainWindow {
-            background-color: #303030; /* Anthracite for main window background */
+            background-color: #303030;
         }
         QWidget, QComboBox QAbstractItemView {
             font-size: 14px;
-            color: #D8BFD8; /* Lilac for better readability */
-            background-color: #303030; /* Anthracite for dropdown background */
-            selection-background-color: #483D8B; /* Dark blue for selection */
-            selection-color: #E1E1E1; /* Light grey for selected item text */
+            color: #D8BFD8;
+            background-color: #303030;
+            selection-background-color: #483D8B;
+            selection-color: #E1E1E1;
         }
         QPushButton {
-            background-color: #483D8B; /* Dark blue */
-            color: #E1E1E1; /* Light grey for text to ensure readability */
+            background-color: #483D8B;
+            color: #E1E1E1;
             border-radius: 5px;
             padding: 10px;
-            border: 1px solid #9370DB; /* A lighter shade of dark blue for border */
+            border: 1px solid #9370DB;
         }
         QPushButton:disabled {
-            background-color: #4F4F4F; /* Dark grey */
-            color: #A9A9A9; /* Light grey */
-            border: 1px solid #696969; /* Dim grey for border */
+            background-color: #4F4F4F;
+            color: #A9A9A9;
+            border: 1px solid #696969;
         }
         QLabel {
             qproperty-alignment: 'AlignCenter';
-            color: #E1E1E1; /* Changing label text to light grey for readability */
+            color: #E1E1E1;
         }
         QComboBox {
             margin: 5px;
-            background-color: #2F4F4F; /* Dark Slate Grey */
-            border: 1px solid #9370DB; /* A lighter shade of dark blue for border */
+            background-color: #2F4F4F;
+            border: 1px solid #9370DB;
         }
         QComboBox::drop-down {
             background-color: #2F4F4F;
             border: 1px solid #9370DB;
         }
         QComboBox::down-arrow {
-            image: url(:/icons/down-arrow.png); /* Ensure you have an appropriate icon */
+            image: url(:/icons/down-arrow.png);
             width: 14px;
             height: 14px;
         }
         QSlider::groove:horizontal {
             border: 1px solid #999999;
-            height: 8px; /* The Groove's height */
-            background: #483D8B; /* Dark blue */
+            height: 8px;
+            background: #483D8B;
             margin: 2px 0;
         }
         QSlider::handle:horizontal {
-            background: #D8BFD8; /* Lilac */
+            background: #D8BFD8;
             border: 1px solid #5c5c5c;
             width: 18px;
-            margin: -2px 0; /* Handle is larger than groove */
+            margin: -2px 0;
             border-radius: 3px;
         }
         QStatusBar {
-            background-color: #303030; /* Anthracite */
-            color: #E1E1E1; /* Light grey for readability */
+            background-color: #303030;
+            color: #E1E1E1;
         }
         """)
 
@@ -360,7 +763,8 @@ class ImageResizingApp(QMainWindow):
             if ok:
                 return factor
         else:
-            # For predefined percentages, strip the '%' character and convert to a float
+            # For predefined percentages,
+            # strip the '%' character and convert to a float
             return float(selected_text.rstrip('%')) / 100
 
     def save_image(self):
@@ -372,7 +776,11 @@ class ImageResizingApp(QMainWindow):
         base, extension = os.path.splitext(self.image_data.original_image_path)
         suggested_file_name = base + "_cropped" + extension
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "Bild speichern", suggested_file_name, "Bild Dateien (*.png *.jpg *.jpeg)")
+            self,
+            "Bild speichern",
+            suggested_file_name,
+            "Bild Dateien (*.png *.jpg *.jpeg)"
+        )
         if file_name:
             ImageProcessor.save_image(self.image_data.resized_image, file_name)
             self.status_bar.showMessage(
@@ -399,11 +807,63 @@ class ImageResizingApp(QMainWindow):
                 file_path)
             self.ui_elements.image_label.setPixmap(
                 QPixmap.fromImage(self.image_data.original_image).scaled(
-                    self.ui_elements.image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    self.ui_elements.image_label.size(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+            )
             self.status_bar.showMessage("Bild erfolgreich geladen")
             self.ui_elements.save_button.setEnabled(False)
             # Update the image history
             self.image_data.add_to_history(self.image_data.original_image)
+
+    def undo_action(self):
+        previous_image = self.image_data.undo()
+        if previous_image:
+            self.ui_elements.image_label.setPixmap(
+                QPixmap.fromImage(previous_image))
+            self.status_bar.showMessage("Undo: Bild wurde zurückgesetzt")
+
+    def redo_action(self):
+        next_image = self.image_data.redo()
+        if next_image:
+            self.ui_elements.image_label.setPixmap(
+                QPixmap.fromImage(next_image))
+            self.status_bar.showMessage("Redo: Bild wurde wiederhergestellt")
+
+    def showAbout(self):
+        QMessageBox.about(
+            self,
+            "About ImageResizer",
+            "ImageResizer is a small image resizing utility built with PyQt5 and OpenCV"
+        )
+
+    def showTutorial(self):
+        QMessageBox.information(
+            self,
+            "Tutorial",
+            "This is a tutorial message"
+        )
+
+    def showContact(self):
+        QMessageBox.information(
+            self,
+            "Contact",
+            "Email: siemenshendrik1@gmail.com"
+        )
+
+    def closeEvent(self, event):
+        reply = QMessageBox.question(
+            self,
+            'Message',
+            "Are you sure you want to quit?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            event.accept()
+        elif reply == QMessageBox.No:
+            event.ignore()
 
 
 if __name__ == '__main__':

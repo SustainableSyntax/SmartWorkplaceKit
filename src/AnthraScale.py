@@ -4,7 +4,9 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QPushButton, QVBoxLayout, QHBoxLayout,
     QLabel, QFileDialog, QStatusBar,
-    QMessageBox, QComboBox, QSlider
+    QMessageBox, QComboBox, QSlider,
+    QInputDialog, QDialog, QProgressBar,
+    QGridLayout, QListWidget
 )
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt
@@ -20,22 +22,39 @@ class ImageProcessor:
         image.save(file_path)
 
     @staticmethod
-    def resize_image(image, factor):
+    def resize_image(image, factor, algorithm=Qt.SmoothTransformation):
         new_width = int(image.width() * factor)
         new_height = int(image.height() * factor)
         return image.scaled(
             new_width,
             new_height,
             Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
+            algorithm
         )
 
 
 class ImageData:
     def __init__(self):
-        self.original_image = None
-        self.original_image_path = ''
-        self.resized_image = None
+        self.image_history = []
+        self.current_index = -1  # No image at the start
+
+    def add_to_history(self, image):
+        # When a new action is done, truncate the list to the current index
+        self.image_history = self.image_history[:self.current_index + 1]
+        self.image_history.append(image.copy())
+        self.current_index += 1
+
+    def undo(self):
+        if self.current_index > 0:
+            self.current_index -= 1
+            return self.image_history[self.current_index]
+        return None
+
+    def redo(self):
+        if self.current_index < len(self.image_history) - 1:
+            self.current_index += 1
+            return self.image_history[self.current_index]
+        return None
 
 
 class UIComponents:
@@ -48,7 +67,9 @@ class UIComponents:
     @staticmethod
     def create_combo_box(options):
         combo_box = QComboBox()
-        combo_box.addItems(options)
+        # Include the new resize options
+        combo_box.addItems(['25%', '50%', '75%', '100%', '200%',
+                           '300%', '400%', '500%', '700%', 'Anpassen...'])
         return combo_box
 
     @staticmethod
@@ -67,12 +88,92 @@ class UIElements:
         self.apply_button = None
         self.save_button = None
         self.image_label = None
+        self.width_input = None
+        self.height_input = None
+        self.aspect_ratio_lock = None
 
     def __repr__(self):
         return "UIElements()"
 
     def __str__(self):
         return "This class holds the necessary UI elements"
+
+
+class DraggableListWidget(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QListWidget.DragDrop)  # Enable drag & drop
+        # Enable multiple selection
+        self.setSelectionMode(QListWidget.ExtendedSelection)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                self.addItem(url.toLocalFile())
+
+
+class BatchProcessingDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Batch Image Resizing')
+        self.layout = QGridLayout(self)
+
+        # Use the DraggableListWidget instead of QListWidget
+        self.image_list_widget = DraggableListWidget(self)
+        self.layout.addWidget(self.image_list_widget, 0, 0, 1, 2)
+
+        self.add_images_button = QPushButton('Add Images', self)
+        self.add_images_button.clicked.connect(self.add_images)
+        self.layout.addWidget(self.add_images_button, 1, 0)
+
+        self.start_button = QPushButton('Start Resizing', self)
+        self.start_button.clicked.connect(self.start_resizing)
+        self.layout.addWidget(self.start_button, 1, 1)
+
+        self.progress_bar = QProgressBar(self)
+        self.layout.addWidget(self.progress_bar, 2, 0, 1, 2)
+
+        self.resize_factors = {'25%': 0.25, '50%': 0.50, '75%': 0.75,
+                               '100%': 1.00, '200%': 2.00, '300%': 3.00,
+                               '400%': 4.00, '500%': 5.00, '700%': 7.00
+                               }
+        self.selected_factor = None
+
+    def add_images(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select Images", "", "Image Files (*.png *.jpg *.jpeg)")
+        for file in files:
+            self.image_list_widget.addItem(file)
+
+    def start_resizing(self):
+        self.selected_factor = self.parent().get_resize_factor()
+        for i in range(self.image_list_widget.count()):
+            item = self.image_list_widget.item(i)
+            image_path = item.text()
+            image = ImageProcessor.load_image(image_path)
+
+            resized_image = ImageProcessor.resize_image(
+                image, self.selected_factor)
+
+            # Erstellt einen neuen Dateinamen,
+            # indem "_resized" vor der Dateiendung eingefügt wird.
+            base, extension = os.path.splitext(image_path)
+            new_image_path = f"{base}_resized{extension}"
+
+            ImageProcessor.save_image(resized_image, new_image_path)
+
+            self.progress_bar.setValue(
+                int((i + 1) / self.image_list_widget.count() * 100))
+        QMessageBox.information(self, "Batch Resizing", "Resizing Completed")
 
 
 class ImageResizingApp(QMainWindow):
@@ -82,6 +183,8 @@ class ImageResizingApp(QMainWindow):
         self.image_data = ImageData()  # Use ImageData instance
         self.ui_elements = UIElements()  # Use UIElements instance
         self.init_ui()
+
+        self.setAcceptDrops(True)
 
     def init_ui(self):
         self.setWindowTitle(self.title)
@@ -132,6 +235,10 @@ class ImageResizingApp(QMainWindow):
             'Anwenden', self.apply_resize)
         controls_layout.addWidget(self.ui_elements.apply_button)
 
+        self.ui_elements.batch_button = UIComponents.create_button(
+            'Batch Processing', self.open_batch_dialog)
+        controls_layout.addWidget(self.ui_elements.batch_button)
+
         self.ui_elements.save_button = UIComponents.create_button(
             'Bild speichern', self.save_image)
         self.ui_elements.save_button.setEnabled(False)
@@ -150,6 +257,10 @@ class ImageResizingApp(QMainWindow):
 
         # Styling (example)
         self.apply_styling()
+
+    def open_batch_dialog(self):
+        dialog = BatchProcessingDialog(self)
+        dialog.exec_()
 
     def apply_styling(self):
         self.setStyleSheet("""
@@ -217,7 +328,8 @@ class ImageResizingApp(QMainWindow):
             self, "Bild öffnen", "", "Bild Dateien (*.png *.jpg *.jpeg)")
         if file_name:
             self.image_data.original_image_path = file_name
-            self.image_data.original_image = ImageProcessor.load_image(file_name)
+            self.image_data.original_image = ImageProcessor.load_image(
+                file_name)
             self.ui_elements.image_label.setPixmap(
                 QPixmap.fromImage(self.image_data.original_image).scaled(
                     self.ui_elements.image_label.size(), Qt.KeepAspectRatio))
@@ -229,12 +341,27 @@ class ImageResizingApp(QMainWindow):
             QMessageBox.warning(self, "Fehler", "Bitte zuerst ein Bild öffnen")
             return
 
-        factor = float(self.ui_elements.size_combo.currentText().rstrip('%')) / 100
-        self.image_data.resized_image = ImageProcessor.resize_image(
-            self.image_data.original_image, factor)
-        self.ui_elements.image_label.setPixmap(QPixmap.fromImage(self.image_data.resized_image))
-        self.status_bar.showMessage("Bildgröße erfolgreich geändert")
-        self.ui_elements.save_button.setEnabled(True)
+        factor = self.get_resize_factor()
+        if factor is not None:
+            self.image_data.resized_image = ImageProcessor.resize_image(
+                self.image_data.original_image, factor)
+            self.ui_elements.image_label.setPixmap(
+                QPixmap.fromImage(self.image_data.resized_image))
+            self.status_bar.showMessage("Bildgröße erfolgreich geändert")
+            self.ui_elements.save_button.setEnabled(True)
+
+    def get_resize_factor(self):
+        selected_text = self.ui_elements.size_combo.currentText()
+        if selected_text == 'Anpassen...':
+            # Open a dialog to get the exact resize factor
+            factor, ok = QInputDialog.getDouble(
+                self, "Größe anpassen", "Neuer Größenfaktor:",
+                1.00, 0.01, 10.00, 2)
+            if ok:
+                return factor
+        else:
+            # For predefined percentages, strip the '%' character and convert to a float
+            return float(selected_text.rstrip('%')) / 100
 
     def save_image(self):
         if not self.image_data.resized_image:
@@ -250,6 +377,33 @@ class ImageResizingApp(QMainWindow):
             ImageProcessor.save_image(self.image_data.resized_image, file_name)
             self.status_bar.showMessage(
                 "Bild erfolgreich gespeichert als: " + file_name)
+
+    # Override the dragEnterEvent method
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    # Override the dropEvent method
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if urls:
+            # Attempt to load the first image from the dropped files
+            image_path = urls[0].toLocalFile()
+            self.load_image(image_path)
+
+    def load_image(self, file_path):
+        """Load and display an image from a file path."""
+        if os.path.isfile(file_path):
+            self.image_data.original_image_path = file_path
+            self.image_data.original_image = ImageProcessor.load_image(
+                file_path)
+            self.ui_elements.image_label.setPixmap(
+                QPixmap.fromImage(self.image_data.original_image).scaled(
+                    self.ui_elements.image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.status_bar.showMessage("Bild erfolgreich geladen")
+            self.ui_elements.save_button.setEnabled(False)
+            # Update the image history
+            self.image_data.add_to_history(self.image_data.original_image)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 src/build/AnthraScale/localpycs/pyimod04_pywin32.pyc
 src/build/AnthraScale/localpycs/
 src/build/
-data/Mappe2.xlsx
 data/*.xlsx
+data/documents/*.xlsx
